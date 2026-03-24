@@ -6,7 +6,7 @@ manifest, and GRF directory scanning to generate that manifest.
 
 Designed to work on output produced by
 [idavoll-grf-extractor](../idavoll_grf_extractor/README.md). Point it at
-`extracted/data/sprite/` as the `grf_root`.
+`extracted/data/` as the `data_root`.
 
 ## Build
 
@@ -61,7 +61,7 @@ determine headgear slot assignments (see below).
 idavoll-sprite-exporter scan [OPTIONS] <data_root>
 
 Arguments:
-  <data_root>  The data/ directory from a idavoll-grf-extractor output
+  <data_root>  The data/ directory from an idavoll-grf-extractor output
 
 Options:
   --slots <PATH>      Path to headgear_slots.toml [default: headgear_slots.toml]
