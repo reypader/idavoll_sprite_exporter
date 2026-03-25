@@ -43,7 +43,7 @@ pub fn batch(
             } else {
                 out_root.join(format!("human_{}_{}", entry.gender, entry.job))
             };
-            if seen.contains(&out_dir.join("body.png")) {
+            if seen.contains(&out_dir.join("body.aseprite")) {
                 continue; // mercenary duplicate
             }
             if let Some(reason) = missing(&spr_path, &act_path) {
@@ -53,7 +53,7 @@ pub fn batch(
             }
             let imf_data = load_imf(entry.imf.as_deref().map(|p| data_root.join(p)))?;
             export_named(&spr_path, &act_path, "body", &out_dir, SpriteKind::Body, imf_data.as_ref())?;
-            seen.insert(out_dir.join("body.png"));
+            seen.insert(out_dir.join("body.aseprite"));
             exported += 1;
         }
     }
@@ -139,7 +139,7 @@ pub fn batch(
                     .join("weapon")
                     .join(&entry.name)
             };
-            let out_path = out_dir.join(format!("{export_name}.png"));
+            let out_path = out_dir.join(format!("{export_name}.aseprite"));
             if seen.contains(&out_path) {
                 continue; // mercenary duplicate
             }

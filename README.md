@@ -45,7 +45,7 @@ Options:
 ```sh
 idavoll-sprite-exporter export sprite/human/body/male/novice_male.spr \
                         sprite/human/body/male/novice_male.act \
-                        -o output/body/novice/male/ \
+                        -o human_male_novice/ \
                         --kind body
 ```
 
@@ -71,8 +71,9 @@ Options:
                          (opt-in; must be specified explicitly)
 ```
 
-ID-based weapon sprites (numeric item IDs without a type name) are warned and skipped
-during scan — only generic type sprites (`sword`, `dagger`, etc.) are included in the base manifest.
+ID-based weapon and shield sprites (numeric item IDs) are warned and skipped during scan.
+Only generic type sprites (`sword`, `dagger`, etc.) and named shields (`buckler`, `guard`, `shield`, etc.)
+are included in the base manifest. ID-specific sprites are reserved for future add-on bundles.
 
 **Example:**
 
@@ -136,9 +137,10 @@ headgears of that gender.
 under a single `mercenary/` bundle. Their head is baked into the body sprite — no
 separate head, headgear, or garment layers.
 
-**PNG layout:** each exported PNG is a 2D grid — one row per action, with frames
-extending right within each row. The JSON `frameTags` index into a flat frame list;
-each frame's `x`/`y` reflects its position in the grid.
+**PNG layout:** each exported PNG is a single horizontal strip. Frames are deduplicated
+by pixel content — identical renders (e.g. stand frames sharing the same art, or all
+invisible weapon frames) share one slot in the strip. The JSON `frameTags` point into
+this flat frame list; multiple tags may reference the same `x` offset.
 
 Any sprite pair where the `.spr` or `.act` file is missing is skipped and
 logged to `skipped.toml` in the output root.

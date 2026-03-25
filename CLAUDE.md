@@ -28,9 +28,10 @@ items = [1201, 1202, ...]
 - `name`: canonical type name used as the output directory key (e.g. `"dagger"`, `"sword"`)
 - `items`: all item IDs belonging to this weapon type
 
-`scan` inverts this into `item_id → type_name` for output path construction.
-ID-based weapon sprite entries are placed inside `weapon/{type_name}/` using their item ID
-as the filename. IDs not present in this file go in `weapon/unknown/`.
+`scan` inverts this into `item_id → type_name` for warning messages.
+ID-based weapon entries (numeric stem) are warned and skipped in the base scan — the type
+hint from this map appears in the warning. Future ID-specific sprite export will use the
+mapping to place them inside `weapon/{type_name}/{id}.png` within the job bundle.
 
 ### `headgear_slots.toml`
 
@@ -87,16 +88,27 @@ projectile/
 - Future: `human_{gender}_{job}_weapons/` (ID-specific weapon sprites)
 - Future: `human_{gender}_{job}_garments/` (garment sprites)
 
-### PNG grid layout
-One row per action, frames within the action extending right.
-- `sheet_w = max_frames_in_any_single_action × canvas_w`
-- `sheet_h = num_actions × canvas_h`
-- Frame in action `a`, position `f`: `x = f × canvas_w`, `y = a × canvas_h`
+### PNG strip layout and deduplication
+Output is a single horizontal strip. Before building the strip, every logical frame is
+rendered and hashed by pixel content. Identical renders share one strip slot:
+- Stand/sit frames with the same body art (anchor differs but pixels are the same) collapse
+- All-invisible frames in sparse sprites (weapons with 90+ empty actions) collapse to one
+  shared transparent slot
 
-### Weapon type filtering
-`scan` requires `--weapon-types weapon_types.toml`. Weapon entries whose name is a numeric
-item ID are warned and skipped — only type-named entries (`sword`, `dagger`, etc.) are
-emitted. Future ID-specific sprites belong in a separate weapons add-on bundle.
+`sheet_w = unique_frame_count × canvas_w`, `sheet_h = canvas_h`.
+The JSON `frameTags` use flat indices; multiple tags may reference the same `x` offset.
+
+### ID-based sprite filtering (weapons and shields)
+`scan` requires `--weapon-types weapon_types.toml` and `--slots headgear_slots.toml`.
+
+**Weapons:** entries whose name parses as a `u32` are warned and skipped. Only
+type-named entries (`sword`, `dagger`, etc.) are emitted. The warning includes the
+type hint from `weapon_types.toml` for future reference.
+
+**Shields:** entries whose name matches `{digits}_shield` (e.g. `28901_shield`) are
+warned and skipped. Named shields (`buckler`, `guard`, `mirror_shield`, `shield`) are
+kept. `te_woe_shield` is renamed to `shield` — it is the canonical generic fallback
+shield and serves the same role as the generic type weapon sprites.
 
 ---
 
