@@ -5,8 +5,98 @@ Convert Ragnarok Online proprietary ACT/SPR sprite formats into standard animati
 (currently: Aseprite-compatible PNG spritesheet + JSON metadata).
 
 Source references:
-- Format docs: `../zrenderer/source/ragnarokresearchlab.github.io/docs/file-formats/`
-- D lang reference implementation: `../zrenderer/source/zrenderer/source/`
+- Format docs: https://ragnarokresearchlab.github.io/file-formats/
+- D lang reference implementation: https://github.com/zhad3/zrenderer/
+- GRF extractor (produces manifest inputs): `../idavoll_grf_extractor`
+
+---
+
+## Extractor Output Files
+
+The GRF extractor writes mapping files alongside the extracted `data/` directory.
+These are consumed by `scan` as inputs (passed via CLI flags).
+
+### `weapon_types.toml`
+
+```toml
+[[weapon_type]]
+id = 1
+name = "dagger"
+items = [1201, 1202, ...]
+```
+
+- `name`: canonical type name used as the output directory key (e.g. `"dagger"`, `"sword"`)
+- `items`: all item IDs belonging to this weapon type
+
+`scan` inverts this into `item_id → type_name` for output path construction.
+ID-based weapon sprite entries are placed inside `weapon/{type_name}/` using their item ID
+as the filename. IDs not present in this file go in `weapon/unknown/`.
+
+### `headgear_slots.toml`
+
+```toml
+[[headgear]]
+view = 1
+slot = "Head_Top"
+accname = "goggle"
+items = [2224, 2225]
+```
+
+- `accname`: matches the sprite stem used by `scan_headgears` (after stripping gender prefix)
+- `slot`: equipment slot — `"Head_Top"`, `"Head_Mid"`, or `"Head_Low"`
+- `view`: numeric view ID (informational; used for grouping identical-looking headgears)
+- `items`: item IDs that use this sprite/slot (for item ID → headgear name mapping)
+
+---
+
+## Output Structure
+
+```
+human_{gender}_{job}/            ← one directory = one base bundle
+  body.png/.json
+  weapon/{type}/
+    weapon.png/.json
+    slash.png/.json
+  shield/
+    {name}.png/.json             ← e.g. buckler.png
+
+human_{gender}_head/             ← one bundle: all heads + headgears for this gender
+  head/
+    {id}.png/.json               ← e.g. 1.png
+  headgear/
+    {name}.png/.json             ← e.g. ribbon.png
+
+mercenary/                       ← single bundle (small set, all types combined)
+  body/{type}/                   ← type = sword / spear / bow
+    body.png/.json
+    weapon/
+      weapon.png/.json
+      slash.png/.json
+
+shadow/
+  shadow.png/.json
+
+projectile/
+  {name}.png/.json
+```
+
+### Bundle boundaries
+- `human_{gender}_{job}/` → base job bundle (body + generic weapons + shields)
+- `human_{gender}_head/` → heads + headgear for this gender (shared, reference-counted)
+- `mercenary/` → single bundle covering all mercenary types
+- Future: `human_{gender}_{job}_weapons/` (ID-specific weapon sprites)
+- Future: `human_{gender}_{job}_garments/` (garment sprites)
+
+### PNG grid layout
+One row per action, frames within the action extending right.
+- `sheet_w = max_frames_in_any_single_action × canvas_w`
+- `sheet_h = num_actions × canvas_h`
+- Frame in action `a`, position `f`: `x = f × canvas_w`, `y = a × canvas_h`
+
+### Weapon type filtering
+`scan` requires `--weapon-types weapon_types.toml`. Weapon entries whose name is a numeric
+item ID are warned and skipped — only type-named entries (`sword`, `dagger`, etc.) are
+emitted. Future ID-specific sprites belong in a separate weapons add-on bundle.
 
 ---
 
@@ -285,7 +375,7 @@ Verified with `m_ax_eyes` (axe-shaped eyes accessory).
   weapon. No displacement offset — shield layer `x,y` is absolute from origin.
 - **Scan:** `scan_shields` iterates `sprite/shield/` job subdirs, strips `{job}_` prefix,
   splits on first `_` for gender. Manifest: `ShieldEntry { name, job, gender, spr, act }`.
-- **Output:** `shield/<name>/<job>/<gender>/` — mirrors weapon output structure.
+- **Output:** `shield/<job>/<gender>/<name>/` — mirrors weapon output structure.
 
 ---
 

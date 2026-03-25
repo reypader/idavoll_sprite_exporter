@@ -22,10 +22,25 @@ struct HeadgearSlotsFile {
 }
 
 // ---------------------------------------------------------------------------
+// weapon_types.toml types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct WeaponTypeEntry {
+    name: String,
+    items: Vec<u32>,
+}
+
+#[derive(Deserialize)]
+struct WeaponTypesFile {
+    weapon_type: Vec<WeaponTypeEntry>,
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
-pub fn scan(data_root: &Path, slots_file: &Path, output: &Path, types: Option<&[String]>) -> Result<()> {
+pub fn scan(data_root: &Path, slots_file: &Path, weapon_types_file: &Path, output: &Path, types: Option<&[String]>) -> Result<()> {
     let want = |t: &str| types.is_some_and(|ts| ts.iter().any(|x| x == t));
     let slots_text = std::fs::read_to_string(slots_file)
         .with_context(|| format!("reading {}", slots_file.display()))?;
@@ -41,6 +56,17 @@ pub fn scan(data_root: &Path, slots_file: &Path, output: &Path, types: Option<&[
                 .as_ref()
                 .map(|name| (name.clone(), (e.view, e.slot.clone())))
         })
+        .collect();
+
+    // item_id -> type_name (inverted from weapon_types.toml)
+    let weapon_types_text = std::fs::read_to_string(weapon_types_file)
+        .with_context(|| format!("reading {}", weapon_types_file.display()))?;
+    let weapon_types_data: WeaponTypesFile = toml::from_str(&weapon_types_text)
+        .with_context(|| format!("parsing {}", weapon_types_file.display()))?;
+    let id_to_weapon_type: HashMap<u32, String> = weapon_types_data
+        .weapon_type
+        .iter()
+        .flat_map(|e| e.items.iter().map(|&id| (id, e.name.clone())))
         .collect();
 
     let data_str = data_root.to_string_lossy().into_owned();
@@ -63,7 +89,7 @@ pub fn scan(data_root: &Path, slots_file: &Path, output: &Path, types: Option<&[
     if want("head")    { scan_heads(data_root, &mut m)?; }
     if want("headgear"){ scan_headgears(data_root, &accname_map, &mut m)?; }
     if want("garment") { scan_garments(data_root, &mut m)?; }
-    if want("weapon")  { scan_weapons(data_root, &mut m)?; }
+    if want("weapon")  { scan_weapons(data_root, &id_to_weapon_type, &mut m)?; }
     if want("shield")      { scan_shields(data_root, &mut m)?; }
     if want("projectile")  { scan_projectiles(data_root, &mut m)?; }
 
@@ -308,7 +334,7 @@ fn scan_garments(data_root: &Path, m: &mut Manifest) -> Result<()> {
 //     — byte-identical duplicates of the same files already in pecopeco_crusader/.
 //       The GRF stores them in both locations. The scan picks them up from
 //       pecopeco_crusader/ (where they belong) and ignores the paladin copies.
-fn scan_weapons(data_root: &Path, m: &mut Manifest) -> Result<()> {
+fn scan_weapons(data_root: &Path, id_to_weapon_type: &HashMap<u32, String>, m: &mut Manifest) -> Result<()> {
     let human_dir = data_root.join("sprite/human");
     if !human_dir.exists() {
         return Ok(());
@@ -386,6 +412,18 @@ fn scan_weapons(data_root: &Path, m: &mut Manifest) -> Result<()> {
             } else {
                 (weapon_part.to_string(), "weapon".to_string())
             };
+
+            // Skip ID-based weapon sprites (numeric name = no generic type art).
+            // These will be exported separately in a future weapons add-on bundle.
+            if let Ok(item_id) = weapon_name.parse::<u32>() {
+                let type_hint = id_to_weapon_type
+                    .get(&item_id)
+                    .map(|t| format!(" (type: {t})"))
+                    .unwrap_or_default();
+                eprintln!("warning: skipping ID-based weapon sprite '{stem}'{type_hint}");
+                continue;
+            }
+
             let rel = format!("sprite/human/{job_dir_name}/{stem}");
             // swordsman_female_two_handed_sword.act was authored with monster-layout
             // 40 actions instead of the correct 104. Fall back to the sword ACT which
@@ -434,7 +472,21 @@ fn scan_shields(data_root: &Path, m: &mut Manifest) -> Result<()> {
             if gender != "male" && gender != "female" {
                 continue;
             }
-            let shield_name = rest[us + 1..].to_string();
+            let raw_name = &rest[us + 1..];
+
+            // Skip ID-based shields (e.g. 28901_shield) — future add-on bundle.
+            if raw_name.strip_suffix("_shield").map(|id| id.parse::<u32>().is_ok()).unwrap_or(false) {
+                eprintln!("warning: skipping ID-based shield sprite '{stem}'");
+                continue;
+            }
+
+            // te_woe_shield is the canonical generic fallback shield — rename for clarity.
+            let shield_name = if raw_name == "te_woe_shield" {
+                "shield".to_string()
+            } else {
+                raw_name.to_string()
+            };
+
             let rel = format!("sprite/shield/{job}/{stem}");
             m.shield.push(ShieldEntry {
                 name: shield_name,

@@ -77,9 +77,13 @@ enum Command {
         /// GRF data root directory (the "data" folder inside the GRF extraction)
         data_root: PathBuf,
 
-        /// Path to headgear_slots.toml
-        #[arg(long, default_value = "headgear_slots.toml")]
+        /// Path to headgear_slots.toml (from idavoll-grf-extractor)
+        #[arg(long, value_name = "PATH")]
         slots: PathBuf,
+
+        /// Path to weapon_types.toml (from idavoll-grf-extractor)
+        #[arg(long, value_name = "PATH")]
+        weapon_types: PathBuf,
 
         /// Output manifest file path
         #[arg(short, long, default_value = "manifest.toml")]
@@ -188,9 +192,9 @@ fn main() -> Result<()> {
             batch::batch(&manifest, output.as_deref(), types.as_deref())?;
         }
 
-        Command::Scan { data_root, slots, output, types } => {
+        Command::Scan { data_root, slots, weapon_types, output, types } => {
             let types = parse_types(types.as_deref())?;
-            scan::scan(&data_root, &slots, &output, types.as_deref())?;
+            scan::scan(&data_root, &slots, &weapon_types, &output, types.as_deref())?;
         }
 
         Command::Dump { act, actions, scan } => {

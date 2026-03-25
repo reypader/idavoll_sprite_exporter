@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use anyhow::Result;
@@ -109,7 +111,7 @@ pub fn export(
     let origin_x = pad - min_x;
     let origin_y = pad - min_y;
 
-    // Count total frames
+    // Count total logical frames
     let total_frames: usize = action_indices
         .iter()
         .map(|&i| act.actions[i].frames.len())
@@ -120,30 +122,56 @@ pub fn export(
         return Ok(());
     }
 
-    // Build the full spritesheet (single horizontal strip)
-    let sheet_w = canvas_w * total_frames as u32;
+    // Pass 1: render every logical frame and deduplicate by pixel content.
+    // Identical rendered images (e.g. stand frames that share the same sprite art,
+    // or all-transparent frames in invisible weapon actions) map to the same strip slot.
+    let mut unique_renders: Vec<RgbaImage> = Vec::new();
+    let mut hash_to_strip: HashMap<u64, u32> = HashMap::new();
+    let mut strip_indices: Vec<u32> = Vec::with_capacity(total_frames);
+
+    for &action_idx in &action_indices {
+        let action = &act.actions[action_idx];
+        for frame in &action.frames {
+            let rendered = render_frame(spr, frame, canvas_w, canvas_h, origin_x, origin_y);
+            let h = hash_pixels(rendered.as_raw());
+            let strip_idx = if let Some(&idx) = hash_to_strip.get(&h) {
+                idx
+            } else {
+                let idx = unique_renders.len() as u32;
+                hash_to_strip.insert(h, idx);
+                unique_renders.push(rendered);
+                idx
+            };
+            strip_indices.push(strip_idx);
+        }
+    }
+
+    // Pass 2: blit unique renders into a single horizontal strip.
+    let unique_count = unique_renders.len() as u32;
+    let sheet_w = canvas_w * unique_count;
     let sheet_h = canvas_h;
     let mut sheet = RgbaImage::new(sheet_w, sheet_h);
+    for (i, img) in unique_renders.iter().enumerate() {
+        let x_offset = i as u32 * canvas_w;
+        for y in 0..canvas_h {
+            for x in 0..canvas_w {
+                sheet.put_pixel(x_offset + x, y, *img.get_pixel(x, y));
+            }
+        }
+    }
 
+    // Pass 3: build JSON metadata using strip indices.
     let mut ase_frames: Vec<AseFrame> = Vec::with_capacity(total_frames);
     let mut frame_tags: Vec<FrameTag> = Vec::new();
     let mut global_frame_idx: u32 = 0;
+    let mut flat_idx: usize = 0;
 
     for &action_idx in &action_indices {
         let action = &act.actions[action_idx];
         let tag_start = global_frame_idx;
 
-        for (frame_idx, frame) in action.frames.iter().enumerate() {
-            let rendered = render_frame(spr, frame, canvas_w, canvas_h, origin_x, origin_y);
-
-            // Blit rendered frame into spritesheet
-            let x_offset = global_frame_idx * canvas_w;
-            for y in 0..canvas_h {
-                for x in 0..canvas_w {
-                    sheet.put_pixel(x_offset + x, y, *rendered.get_pixel(x, y));
-                }
-            }
-
+        for (frame_idx, _) in action.frames.iter().enumerate() {
+            let x_offset = strip_indices[flat_idx] * canvas_w;
             let frame_z_order = sprite_kind
                 .map(|kind| z_order(kind, action_idx, frame_idx, imf));
 
@@ -159,6 +187,7 @@ pub fn export(
                 z_order: frame_z_order,
             });
 
+            flat_idx += 1;
             global_frame_idx += 1;
         }
 
@@ -198,11 +227,17 @@ pub fn export(
 
     println!(
         "Canvas: {canvas_w}×{canvas_h}px, origin at ({origin_x},{origin_y}), \
-         {total_frames} frames across {} actions",
+         {} actions, {total_frames} logical frames → {unique_count} unique in strip",
         action_indices.len()
     );
 
     Ok(())
+}
+
+fn hash_pixels(bytes: &[u8]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Human-readable action label. Uses monster labels for ACTs with ≤40 actions (multiples of 8),

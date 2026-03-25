@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use crate::manifest::{self, Manifest};
 use crate::zorder::SpriteKind;
@@ -28,19 +29,31 @@ pub fn batch(
     let mut exported = 0usize;
     let mut skipped = 0usize;
 
+    // Mercenary entries point at shared files emitted once per gender in the manifest.
+    // Track output paths already written so we skip the duplicate gender entry.
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+
     // Bodies
     if want("body") {
         for entry in &m.body {
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
-            let out_dir = out_root.join("body").join(&entry.job).join(&entry.gender);
+            let out_dir = if let Some(merc_type) = entry.job.strip_suffix("_mercenary") {
+                out_root.join("mercenary").join("body").join(merc_type)
+            } else {
+                out_root.join(format!("human_{}_{}", entry.gender, entry.job))
+            };
+            if seen.contains(&out_dir.join("body.png")) {
+                continue; // mercenary duplicate
+            }
             if let Some(reason) = missing(&spr_path, &act_path) {
                 log_skip(&mut skip_log, "body", &toml::to_string(entry)?, &reason);
                 skipped += 1;
                 continue;
             }
             let imf_data = load_imf(entry.imf.as_deref().map(|p| data_root.join(p)))?;
-            export(&spr_path, &act_path, &out_dir, SpriteKind::Body, imf_data.as_ref())?;
+            export_named(&spr_path, &act_path, "body", &out_dir, SpriteKind::Body, imf_data.as_ref())?;
+            seen.insert(out_dir.join("body.png"));
             exported += 1;
         }
     }
@@ -51,16 +64,16 @@ pub fn batch(
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
             let out_dir = out_root
-                .join("head")
-                .join(entry.id.to_string())
-                .join(&entry.gender);
+                .join(format!("human_{}_head", entry.gender))
+                .join("head");
+            let name = entry.id.to_string();
             if let Some(reason) = missing(&spr_path, &act_path) {
                 log_skip(&mut skip_log, "head", &toml::to_string(entry)?, &reason);
                 skipped += 1;
                 continue;
             }
             let imf_data = load_imf(entry.imf.as_deref().map(|p| data_root.join(p)))?;
-            export(&spr_path, &act_path, &out_dir, SpriteKind::Head, imf_data.as_ref())?;
+            export_named(&spr_path, &act_path, &name, &out_dir, SpriteKind::Head, imf_data.as_ref())?;
             exported += 1;
         }
     }
@@ -71,9 +84,8 @@ pub fn batch(
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
             let out_dir = out_root
-                .join("headgear")
-                .join(&entry.name)
-                .join(&entry.gender);
+                .join(format!("human_{}_head", entry.gender))
+                .join("headgear");
             let slot =
                 manifest::parse_headgear_slot(&entry.slot).map_err(|e| anyhow::anyhow!(e))?;
             if let Some(reason) = missing(&spr_path, &act_path) {
@@ -81,9 +93,10 @@ pub fn batch(
                 skipped += 1;
                 continue;
             }
-            export(
+            export_named(
                 &spr_path,
                 &act_path,
+                &entry.name,
                 &out_dir,
                 SpriteKind::Headgear { slot },
                 None,
@@ -98,16 +111,15 @@ pub fn batch(
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
             let out_dir = out_root
+                .join(format!("human_{}_{}", entry.gender, entry.job))
                 .join("garment")
-                .join(&entry.name)
-                .join(&entry.job)
-                .join(&entry.gender);
+                .join(&entry.name);
             if let Some(reason) = missing(&spr_path, &act_path) {
                 log_skip(&mut skip_log, "garment", &toml::to_string(entry)?, &reason);
                 skipped += 1;
                 continue;
             }
-            export(&spr_path, &act_path, &out_dir, SpriteKind::Garment, None)?;
+            export_named(&spr_path, &act_path, "garment", &out_dir, SpriteKind::Garment, None)?;
             exported += 1;
         }
     }
@@ -117,12 +129,20 @@ pub fn batch(
         for entry in &m.weapon {
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
-            let out_dir = out_root
-                .join("weapon")
-                .join(&entry.name)
-                .join(&entry.job)
-                .join(&entry.gender)
-                .join(&entry.slot);
+            // slot string is "weapon" or "slash" — use as the export filename
+            let export_name = entry.slot.as_str();
+            let out_dir = if let Some(merc_type) = entry.job.strip_suffix("_mercenary") {
+                out_root.join("mercenary").join("body").join(merc_type).join("weapon")
+            } else {
+                out_root
+                    .join(format!("human_{}_{}", entry.gender, entry.job))
+                    .join("weapon")
+                    .join(&entry.name)
+            };
+            let out_path = out_dir.join(format!("{export_name}.png"));
+            if seen.contains(&out_path) {
+                continue; // mercenary duplicate
+            }
             let slot =
                 manifest::parse_weapon_slot(&entry.slot).map_err(|e| anyhow::anyhow!(e))?;
             if let Some(reason) = missing(&spr_path, &act_path) {
@@ -130,13 +150,15 @@ pub fn batch(
                 skipped += 1;
                 continue;
             }
-            export(
+            export_named(
                 &spr_path,
                 &act_path,
+                export_name,
                 &out_dir,
                 SpriteKind::Weapon { slot },
                 None,
             )?;
+            seen.insert(out_path);
             exported += 1;
         }
     }
@@ -147,16 +169,14 @@ pub fn batch(
             let spr_path = data_root.join(&entry.spr);
             let act_path = data_root.join(&entry.act);
             let out_dir = out_root
-                .join("shield")
-                .join(&entry.name)
-                .join(&entry.job)
-                .join(&entry.gender);
+                .join(format!("human_{}_{}", entry.gender, entry.job))
+                .join("shield");
             if let Some(reason) = missing(&spr_path, &act_path) {
                 log_skip(&mut skip_log, "shield", &toml::to_string(entry)?, &reason);
                 skipped += 1;
                 continue;
             }
-            export(&spr_path, &act_path, &out_dir, SpriteKind::Shield, None)?;
+            export_named(&spr_path, &act_path, &entry.name, &out_dir, SpriteKind::Shield, None)?;
             exported += 1;
         }
     }
@@ -172,7 +192,7 @@ pub fn batch(
                 skipped += 1;
                 continue;
             }
-            export(&spr_path, &act_path, &out_dir, SpriteKind::Shadow, None)?;
+            export_named(&spr_path, &act_path, "shadow", &out_dir, SpriteKind::Shadow, None)?;
             exported += 1;
         }
     }
@@ -230,20 +250,6 @@ fn load_imf(path: Option<std::path::PathBuf>) -> Result<Option<imf::ImfFile>> {
         Some(p) if p.exists() => Ok(Some(imf::ImfFile::parse(&std::fs::read(&p)?)?)),
         _ => Ok(None),
     }
-}
-
-fn export(
-    spr_path: &Path,
-    act_path: &Path,
-    out_dir: &Path,
-    kind: SpriteKind,
-    imf: Option<&imf::ImfFile>,
-) -> Result<()> {
-    let base_name = spr_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("sprite");
-    export_named(spr_path, act_path, base_name, out_dir, kind, imf)
 }
 
 fn export_named(
