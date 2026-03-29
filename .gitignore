@@ -1,0 +1,13 @@
+# Rust
+/target/
+Cargo.lock
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# macOS
+.DS_Store

@@ -1,0 +1,22 @@
+[package]
+name = "bevy_ro_sprite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_sprite",
+    "bevy_sprite_render",
+    "bevy_render",
+    "bevy_asset",
+    "bevy_log",
+    "png",
+] }
+ro-sprite = { path = "../ro-sprite" }
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive"] }
+
+[features]
+3d = ["bevy/bevy_pbr"]
