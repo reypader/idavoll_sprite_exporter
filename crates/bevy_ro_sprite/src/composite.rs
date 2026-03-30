@@ -186,7 +186,7 @@ impl Material for RoCompositeMaterial {
         COMPOSITE_SHADER_HANDLE.into()
     }
     fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Blend
+        AlphaMode::AlphaToCoverage
     }
 }
 
@@ -257,7 +257,15 @@ pub fn update_ro_composite(
     layouts:    Res<Assets<TextureAtlasLayout>>,
     mut mats:   ResMut<Assets<RoCompositeMaterial>>,
     time:       Res<Time>,
+    camera_q:   Query<&GlobalTransform, With<Camera3d>>,
 ) {
+    // Camera right/up in world space: the billboard's local axes after look_at.
+    // Used to convert canvas-pixel offsets to world-space translation.
+    let (cam_right, cam_up) = if let Ok(cam_gt) = camera_q.single() {
+        (cam_gt.right(), cam_gt.up())
+    } else {
+        (Dir3::X, Dir3::Y)
+    };
     for (mut composite, mat_handle, mut transform) in &mut composites {
         // ── 1. Advance animation ──────────────────────────────────────────
         // Resolve tag range and frame duration from the first layer's atlas.
@@ -411,16 +419,23 @@ pub fn update_ro_composite(
             mat.layers      = layer_uniforms;
         }
 
-        // ── 6. Size the billboard quad ────────────────────────────────────
-        // Scale so 1 unit = 1 pixel. Feet sit at y=0.
+        // ── 6. Size and position the billboard quad ───────────────────────
+        // Scale so 1 unit = 1 pixel.
         transform.scale = Vec3::new(canvas_size.x, canvas_size.y, 1.0);
-        // Center the quad vertically so feet land at y=0
-        //   canvas_feet.y pixels from the top → that many pixels above bottom
-        //   bottom of quad = transform.y - canvas_size.y/2
-        //   We want feet (canvas_feet.y from top) to be at y=0:
-        //   transform.y = canvas_size.y/2 - canvas_feet.y
-        transform.translation.y = -(canvas_size.y / 2.0 - canvas_feet.y);
-        transform.translation.x = canvas_feet.x - canvas_size.x / 2.0;
+
+        // The canvas feet pixel is at local offset (local_x, local_y) from the
+        // billboard center (in y-up scaled space):
+        //   local_x = canvas_feet.x - canvas_size.x / 2  (rightward in canvas)
+        //   local_y = canvas_size.y / 2 - canvas_feet.y  (upward; feet below center → negative)
+        //
+        // The billboard's local axes are the camera's right/up in world space.
+        // To place the feet pixel at the actor's world position (parent origin),
+        // the billboard center must be offset by -R*(local_x, local_y, 0):
+        //   translation = -local_x * cam_right - local_y * cam_up
+        let local_x = canvas_feet.x - canvas_size.x / 2.0;
+        let local_y = canvas_size.y / 2.0 - canvas_feet.y;
+        transform.translation = -*cam_right * local_x - *cam_up * local_y;
+
     }
 }
 
