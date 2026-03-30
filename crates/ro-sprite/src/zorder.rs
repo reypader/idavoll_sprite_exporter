@@ -16,14 +16,18 @@ pub enum SpriteKind {
     Body,
     Head,
     /// `slot` 0–3: upper, middle, lower, extra headgear layer
-    Headgear { slot: u8 },
+    Headgear {
+        slot: u8,
+    },
     /// `slot` 0 = weapon, 1 = weapon slash effect
-    Weapon { slot: u8 },
+    Weapon {
+        slot: u8,
+    },
 }
 
 impl SpriteKind {
     /// Parse from CLI string. Returns an error message on unknown input.
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn for_str(s: &str) -> Result<Self, String> {
         match s {
             "shadow" => Ok(Self::Shadow),
             "garment" => Ok(Self::Garment),
@@ -50,14 +54,31 @@ impl SpriteKind {
 /// For `Garment`, the returned value (35) is a conservative "always on top" default. The
 /// correct value for a specific garment item may differ per action/frame based on runtime
 /// Lua tables and should be overridden by the consumer when that context is available.
-pub fn z_order(kind: &SpriteKind, action_idx: usize, frame_idx: usize, imf: Option<&ImfFile>) -> i32 {
+pub fn z_order(
+    kind: &SpriteKind,
+    action_idx: usize,
+    frame_idx: usize,
+    imf: Option<&ImfFile>,
+) -> i32 {
     let top_left = matches!(action_idx % 8, 2..=5);
 
     match kind {
         SpriteKind::Shadow => -1,
         SpriteKind::Garment => 35,
-        SpriteKind::Shield => if top_left { 10 } else { 30 },
-        SpriteKind::Body => if top_left { 15 } else { 10 },
+        SpriteKind::Shield => {
+            if top_left {
+                10
+            } else {
+                30
+            }
+        }
+        SpriteKind::Body => {
+            if top_left {
+                15
+            } else {
+                10
+            }
+        }
         SpriteKind::Head => {
             let behind = imf
                 .and_then(|f| f.priority(1, action_idx, frame_idx))
@@ -71,10 +92,18 @@ pub fn z_order(kind: &SpriteKind, action_idx: usize, frame_idx: usize, imf: Opti
             }
         }
         SpriteKind::Headgear { slot } => {
-            if top_left { 25 - (3 - *slot as i32) } else { 20 - (3 - *slot as i32) }
+            if top_left {
+                25 - (3 - *slot as i32)
+            } else {
+                20 - (3 - *slot as i32)
+            }
         }
         SpriteKind::Weapon { slot } => {
-            if top_left { 30 - (2 - *slot as i32) } else { 25 - (2 - *slot as i32) }
+            if top_left {
+                30 - (2 - *slot as i32)
+            } else {
+                25 - (2 - *slot as i32)
+            }
         }
     }
 }

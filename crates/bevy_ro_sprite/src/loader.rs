@@ -9,7 +9,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use ro_sprite::{ActFile, ImfFile, SprFile, composite::render_frame_tight};
+use ro_sprite::{composite::render_frame_tight, ActFile, ImfFile, SprFile};
 
 use crate::action_label;
 
@@ -54,7 +54,9 @@ pub struct RoAtlasLoaderSettings {
 
 impl Default for RoAtlasLoaderSettings {
     fn default() -> Self {
-        Self { sampler: ImageSampler::nearest() }
+        Self {
+            sampler: ImageSampler::nearest(),
+        }
     }
 }
 
@@ -82,11 +84,12 @@ impl AssetLoader for RoAtlasLoader {
         let act_bytes = load_context.read_asset_bytes(act_path).await?;
         let act = ActFile::parse(&act_bytes)?;
 
-        let imf: Option<ImfFile> = if let Ok(imf_bytes) = load_context.read_asset_bytes(imf_path).await {
-            Some(ImfFile::parse(&imf_bytes)?)
-        } else {
-            None
-        };
+        let imf: Option<ImfFile> =
+            if let Ok(imf_bytes) = load_context.read_asset_bytes(imf_path).await {
+                Some(ImfFile::parse(&imf_bytes)?)
+            } else {
+                None
+            };
 
         // Determine which actions to include (skip "unknown" group 72-79 for 104-action sprites)
         let action_indices: Vec<usize> = (0..act.actions.len())
@@ -109,9 +112,8 @@ impl AssetLoader for RoAtlasLoader {
 
             for (frame_idx, frame) in action.frames.iter().enumerate() {
                 frame_durations.push(Duration::from_millis(ms));
-                frame_attach_points.push(
-                    frame.attach_points.first().map(|ap| IVec2::new(ap.x, ap.y))
-                );
+                frame_attach_points
+                    .push(frame.attach_points.first().map(|ap| IVec2::new(ap.x, ap.y)));
 
                 match render_frame_tight(&spr, frame, pad) {
                     Some((buf, origin_x, origin_y)) => {
@@ -158,7 +160,11 @@ impl AssetLoader for RoAtlasLoader {
                             let image = Image {
                                 sampler: settings.sampler.clone(),
                                 ..Image::new(
-                                    Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                                    Extent3d {
+                                        width: 1,
+                                        height: 1,
+                                        depth_or_array_layers: 1,
+                                    },
                                     TextureDimension::D2,
                                     vec![0u8; 4],
                                     TextureFormat::Rgba8UnormSrgb,
@@ -182,7 +188,9 @@ impl AssetLoader for RoAtlasLoader {
         // We need stable IDs to map images → atlas indices
         let mut image_ids: Vec<AssetId<Image>> = Vec::new();
         for image in &unique_images {
-            let id = AssetId::Uuid { uuid: uuid::Uuid::new_v4() };
+            let id = AssetId::Uuid {
+                uuid: uuid::Uuid::new_v4(),
+            };
             image_ids.push(id);
             atlas_builder.add_texture(Some(id), image);
         }
@@ -201,7 +209,12 @@ impl AssetLoader for RoAtlasLoader {
         for &action_idx in &action_indices {
             let n = act.actions[action_idx].frames.len() as u16;
             let name = action_label(action_idx, act.actions.len());
-            tags.insert(name, TagMeta { range: cursor..=cursor + n - 1 });
+            tags.insert(
+                name,
+                TagMeta {
+                    range: cursor..=cursor + n - 1,
+                },
+            );
             cursor += n;
         }
 

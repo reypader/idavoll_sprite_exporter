@@ -1,26 +1,26 @@
 mod animation;
-mod loader;
 #[cfg(feature = "3d")]
 pub mod composite;
+mod loader;
 
 pub use animation::{
-    render_animation, AnimationRepeat, RoAnimation, RoAnimationControl, RoAnimationPlugin,
-    RoAnimationState, RenderAnimation,
+    render_animation, AnimationRepeat, RenderAnimation, RoAnimation, RoAnimationControl,
+    RoAnimationPlugin, RoAnimationState,
 };
 pub use loader::{RoAtlas, RoAtlasLoader, RoAtlasLoaderSettings, TagMeta};
 
 pub mod prelude {
     pub use crate::animation::{
-        render_animation, AnimationRepeat, RoAnimation, RoAnimationControl, RoAnimationPlugin,
-        RoAnimationState, RenderAnimation,
+        render_animation, AnimationRepeat, RenderAnimation, RoAnimation, RoAnimationControl,
+        RoAnimationPlugin, RoAnimationState,
     };
-    pub use crate::loader::{RoAtlas, RoAtlasLoader, TagMeta};
-    pub use crate::RoSpritePlugin;
     #[cfg(feature = "3d")]
     pub use crate::composite::{
         composite_tag, direction_index, orient_billboard, CompositeLayerDef, RoComposite,
         RoCompositeMaterial, RoCompositePlugin, MAX_LAYERS,
     };
+    pub use crate::loader::{RoAtlas, RoAtlasLoader, TagMeta};
+    pub use crate::RoSpritePlugin;
 }
 
 use bevy::prelude::*;

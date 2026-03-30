@@ -163,7 +163,12 @@ pub(crate) fn frame_bounds(spr: &SprFile, frame: &ActFrame) -> Option<(i32, i32,
         let tx = layer.x as f32;
         let ty = layer.y as f32;
 
-        for (u, v) in [(-w / 2.0, -h / 2.0), (w / 2.0, -h / 2.0), (w / 2.0, h / 2.0), (-w / 2.0, h / 2.0)] {
+        for (u, v) in [
+            (-w / 2.0, -h / 2.0),
+            (w / 2.0, -h / 2.0),
+            (w / 2.0, h / 2.0),
+            (-w / 2.0, h / 2.0),
+        ] {
             let cx = (cos_a * sx * u - sin_a * sy * v + tx).round() as i32;
             let cy = (sin_a * sx * u + cos_a * sy * v + ty).round() as i32;
             min_x = min_x.min(cx);
@@ -173,7 +178,11 @@ pub(crate) fn frame_bounds(spr: &SprFile, frame: &ActFrame) -> Option<(i32, i32,
         }
     }
 
-    if min_x == i32::MAX { None } else { Some((min_x, min_y, max_x, max_y)) }
+    if min_x == i32::MAX {
+        None
+    } else {
+        Some((min_x, min_y, max_x, max_y))
+    }
 }
 
 fn blit_transformed(
@@ -257,7 +266,11 @@ fn blit_transformed(
 }
 
 fn effective_scale(layer: &ActSprite) -> (f32, f32) {
-    let flip = if layer.flags & 1 != 0 { -1.0f32 } else { 1.0f32 };
+    let flip = if layer.flags & 1 != 0 {
+        -1.0f32
+    } else {
+        1.0f32
+    };
     (layer.x_scale * flip, layer.y_scale)
 }
 

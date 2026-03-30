@@ -50,7 +50,9 @@ impl<M: Material2d + RenderAnimation> RenderAnimation for MeshMaterial2d<M> {
         state: &RoAnimationState,
         extra: &mut Self::Extra<'_>,
     ) {
-        let Some(material) = extra.0.get_mut(&*self) else { return; };
+        let Some(material) = extra.0.get_mut(&*self) else {
+            return;
+        };
         material.render_animation(atlas, state, &mut extra.1);
     }
 }
@@ -64,7 +66,9 @@ impl<M: Material + RenderAnimation> RenderAnimation for MeshMaterial3d<M> {
         state: &RoAnimationState,
         extra: &mut Self::Extra<'_>,
     ) {
-        let Some(material) = extra.0.get_mut(&*self) else { return; };
+        let Some(material) = extra.0.get_mut(&*self) else {
+            return;
+        };
         material.render_animation(atlas, state, &mut extra.1);
     }
 }
@@ -152,9 +156,8 @@ pub fn update_ro_animation(
             continue;
         }
 
-        state.elapsed += Duration::from_secs_f32(
-            time.delta_secs() * animation.animation.speed.max(0.0),
-        );
+        state.elapsed +=
+            Duration::from_secs_f32(time.delta_secs() * animation.animation.speed.max(0.0));
 
         let Some(frame_dur) = atlas.frame_durations.get(usize::from(state.current_frame)) else {
             continue;

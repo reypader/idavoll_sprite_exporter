@@ -6,16 +6,16 @@ pub struct ActSprite {
     pub x: i32,
     pub y: i32,
     pub spr_id: i32,
-    pub flags: u32,     // bit 0 = horizontal flip
-    pub tint: [u8; 4],  // [R, G, B, A], default 255,255,255,255
+    pub flags: u32,    // bit 0 = horizontal flip
+    pub tint: [u8; 4], // [R, G, B, A], default 255,255,255,255
     pub x_scale: f32,
     pub y_scale: f32,
-    pub rotation: i32,  // degrees, clockwise
-    pub spr_type: i32,  // 0 = palette-indexed, 1 = RGBA
+    pub rotation: i32, // degrees, clockwise
+    pub spr_type: i32, // 0 = palette-indexed, 1 = RGBA
     #[allow(dead_code)]
-    pub width: i32,     // explicit (v2.5+), 0 if not stored
+    pub width: i32, // explicit (v2.5+), 0 if not stored
     #[allow(dead_code)]
-    pub height: i32,    // explicit (v2.5+), 0 if not stored
+    pub height: i32, // explicit (v2.5+), 0 if not stored
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +86,11 @@ impl ActFile {
                     let mut tint = [0u8; 4]; // [R, G, B, A]
                     c.read_exact(&mut tint)?;
                     let x_scale = rf32(&mut c)?;
-                    let y_scale = if version >= 0x204 { rf32(&mut c)? } else { x_scale };
+                    let y_scale = if version >= 0x204 {
+                        rf32(&mut c)?
+                    } else {
+                        x_scale
+                    };
                     let rotation = ri32(&mut c)?;
                     let spr_type = ri32(&mut c)?;
                     let (width, height) = if version >= 0x205 {
@@ -95,9 +99,17 @@ impl ActFile {
                         (0, 0)
                     };
                     sprites.push(ActSprite {
-                        x, y, spr_id, flags, tint,
-                        x_scale, y_scale, rotation, spr_type,
-                        width, height,
+                        x,
+                        y,
+                        spr_id,
+                        flags,
+                        tint,
+                        x_scale,
+                        y_scale,
+                        rotation,
+                        spr_type,
+                        width,
+                        height,
                     });
                 }
 
@@ -118,10 +130,17 @@ impl ActFile {
                     vec![]
                 };
 
-                frames.push(ActFrame { event_id, sprites, attach_points });
+                frames.push(ActFrame {
+                    event_id,
+                    sprites,
+                    attach_points,
+                });
             }
 
-            actions.push(ActAction { interval: 4.0, frames });
+            actions.push(ActAction {
+                interval: 4.0,
+                frames,
+            });
         }
 
         let events = if version >= 0x201 {
@@ -148,7 +167,11 @@ impl ActFile {
             }
         }
 
-        Ok(ActFile { version, actions, events })
+        Ok(ActFile {
+            version,
+            actions,
+            events,
+        })
     }
 }
 

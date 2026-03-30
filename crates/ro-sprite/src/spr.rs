@@ -35,7 +35,7 @@ impl SprFile {
 
         let mut c = Cursor::new(data);
 
-            let mut sig = [0u8; 2];
+        let mut sig = [0u8; 2];
         c.read_exact(&mut sig)?;
         if &sig != b"SP" {
             return Err(anyhow!("Invalid SPR signature"));
@@ -43,7 +43,11 @@ impl SprFile {
 
         let version = ru16(&mut c)?;
         let pal_count = ru16(&mut c)? as usize;
-        let rgba_count = if version >= 0x200 { ru16(&mut c)? as usize } else { 0 };
+        let rgba_count = if version >= 0x200 {
+            ru16(&mut c)? as usize
+        } else {
+            0
+        };
 
         // Palette is always the last 1024 bytes of the file
         let palette = read_palette(&data[data.len() - 1024..]);
@@ -75,7 +79,11 @@ impl SprFile {
                     .collect()
             };
 
-            palette_images.push(RawImage { width, height, pixels });
+            palette_images.push(RawImage {
+                width,
+                height,
+                pixels,
+            });
         }
 
         // --- RGBA truecolor images ---
@@ -102,10 +110,19 @@ impl SprFile {
                 }
             }
 
-            rgba_images.push(RawImage { width, height, pixels });
+            rgba_images.push(RawImage {
+                width,
+                height,
+                pixels,
+            });
         }
 
-        Ok(SprFile { version, palette, palette_images, rgba_images })
+        Ok(SprFile {
+            version,
+            palette,
+            palette_images,
+            rgba_images,
+        })
     }
 
     pub fn get_image(&self, spr_id: i32, spr_type: i32) -> Option<&RawImage> {
@@ -128,10 +145,19 @@ fn decode_rle(compressed: &[u8], expected: usize, palette: &Palette) -> Vec<Colo
         i += 1;
         if idx == 0 {
             // RLE run: next byte is count of transparent pixels
-            let count = if i < compressed.len() { compressed[i] as usize } else { 0 };
+            let count = if i < compressed.len() {
+                compressed[i] as usize
+            } else {
+                0
+            };
             i += 1;
             for _ in 0..count {
-                out.push(Color { r: 0, g: 0, b: 0, a: 0 });
+                out.push(Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0,
+                });
             }
         } else {
             let mut col = palette[idx as usize];
