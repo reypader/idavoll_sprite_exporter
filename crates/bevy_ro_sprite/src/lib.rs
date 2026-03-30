@@ -18,8 +18,8 @@ pub mod prelude {
     pub use crate::RoSpritePlugin;
     #[cfg(feature = "3d")]
     pub use crate::composite::{
-        composite_tag, CompositeLayerDef, RoComposite, RoCompositeMaterial, RoCompositePlugin,
-        MAX_LAYERS,
+        composite_tag, direction_index, orient_billboard, CompositeLayerDef, RoComposite,
+        RoCompositeMaterial, RoCompositePlugin, MAX_LAYERS,
     };
 }
 

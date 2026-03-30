@@ -242,7 +242,7 @@ impl Plugin for RoCompositePlugin {
             Shader::from_wgsl
         );
         app.add_plugins(MaterialPlugin::<RoCompositeMaterial>::default());
-        app.add_systems(Update, update_ro_composite);
+        app.add_systems(Update, (orient_billboard, update_ro_composite).chain());
     }
 }
 
@@ -440,7 +440,47 @@ pub fn update_ro_composite(
 }
 
 /// Builds the action tag string for use with [`RoComposite::tag`].
+///
+/// `action` is the animation name (e.g. `"idle"`, `"walk"`) and `dir` is the
+/// 0-7 direction index from [`direction_index`].
 pub fn composite_tag(action: &str, dir: u8) -> String {
     const DIRS: &[&str] = &["s", "sw", "w", "nw", "n", "ne", "e", "se"];
     format!("{}_{}", action, DIRS[dir as usize % 8])
+}
+
+/// Converts a world-space facing direction + camera forward to a 0–7 direction index.
+///
+/// Index 0 = south (toward camera), clockwise: `0=s 1=sw 2=w 3=nw 4=n 5=ne 6=e 7=se`.
+///
+/// `facing` is the actor's facing direction in the XZ world plane (Y component ignored).
+/// `cam_fwd` is the camera's forward direction projected onto XZ (from `Transform::forward`).
+pub fn direction_index(facing: Vec2, cam_fwd: Vec2) -> u8 {
+    let facing = facing.normalize_or(Vec2::Y);
+    let cam_right = Vec2::new(-cam_fwd.y, cam_fwd.x);
+    let screen_x = facing.dot(cam_right);
+    let screen_y = facing.dot(-cam_fwd);
+    let angle = screen_y.atan2(screen_x);
+    let angle = if angle < 0.0 { angle + std::f32::consts::TAU } else { angle };
+    ((angle + std::f32::consts::PI / 8.0) / (std::f32::consts::TAU / 8.0)) as u8 % 8
+}
+
+/// Keeps every [`RoComposite`] billboard facing the camera.
+///
+/// Rotates the billboard about its parent's world position (actor feet) so that the
+/// canvas always faces the camera regardless of the billboard's canvas-layout translation.
+pub fn orient_billboard(
+    mut billboards: Query<(&mut Transform, &ChildOf), (With<RoComposite>, Without<Camera3d>)>,
+    parents: Query<&GlobalTransform>,
+    camera_q: Query<&Transform, (With<Camera3d>, Without<RoComposite>)>,
+) {
+    let Ok(cam) = camera_q.single() else { return };
+    for (mut tf, child_of) in &mut billboards {
+        let pivot = parents
+            .get(child_of.parent())
+            .map(|gt| gt.translation())
+            .unwrap_or(Vec3::ZERO);
+        let dir_to_cam = (cam.translation - pivot).normalize_or_zero();
+        let target = tf.translation - dir_to_cam;
+        tf.look_at(target, cam.up());
+    }
 }
