@@ -28,6 +28,10 @@ pub struct RoAtlas {
     pub tags: HashMap<String, TagMeta>,
     /// logical frame index → atlas slot index (after deduplication)
     pub frame_indices: Vec<usize>,
+    /// Per logical frame: whether the IMF file says the head layer (layer 1) should render
+    /// behind the body. Only meaningful for body sprites that have an associated `.imf` file;
+    /// always `false` for other sprite types.
+    pub frame_head_behind: Vec<bool>,
 }
 
 impl RoAtlas {
@@ -103,6 +107,7 @@ impl AssetLoader for RoAtlasLoader {
         let mut frame_durations: Vec<Duration> = Vec::new();
         let mut frame_origins: Vec<IVec2> = Vec::new();
         let mut frame_attach_points: Vec<Option<IVec2>> = Vec::new();
+        let mut frame_head_behind: Vec<bool> = Vec::new();
 
         let pad = 1i32;
 
@@ -114,6 +119,12 @@ impl AssetLoader for RoAtlasLoader {
                 frame_durations.push(Duration::from_millis(ms));
                 frame_attach_points
                     .push(frame.attach_points.first().map(|ap| IVec2::new(ap.x, ap.y)));
+
+                // IMF priority(layer=1, action, frame) == 1 → head renders behind body.
+                frame_head_behind.push(
+                    imf.as_ref()
+                        .and_then(|f| f.priority(1, action_idx, frame_idx)) == Some(1),
+                );
 
                 match render_frame_tight(&spr, frame, pad) {
                     Some((buf, origin_x, origin_y)) => {
@@ -144,8 +155,6 @@ impl AssetLoader for RoAtlasLoader {
                             frame_origins.push(IVec2::new(origin_x, origin_y));
                             idx
                         };
-                        let _ = imf; // imf used for z-order, not needed here
-                        let _ = frame_idx;
                         frame_indices.push(atlas_idx);
                     }
                     None => {
@@ -229,6 +238,7 @@ impl AssetLoader for RoAtlasLoader {
             frame_attach_points,
             tags,
             frame_indices: remapped,
+            frame_head_behind,
         })
     }
 

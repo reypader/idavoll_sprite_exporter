@@ -205,11 +205,58 @@ impl Material for RoCompositeMaterial {
 // RoComposite component
 // ─────────────────────────────────────────────────────────────
 
+/// The role of a layer in the composite. Determines z-order based on direction and IMF data,
+/// matching the draw-order table from zrenderer (`source/sprite.d`).
+///
+/// Direction groups:
+/// - **topLeft**: W, NW, N, NE (direction indices 2–5)
+/// - **bottomRight**: S, SW, E, SE (direction indices 0–1, 6–7)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpriteRole {
+    Shadow,
+    Body,
+    Head,
+    /// `slot` 0–3 maps to upper/middle/lower/extra headgear slots.
+    Headgear { slot: u8 },
+    /// `slot` 0 = main weapon, `slot` 1 = slash/glow overlay.
+    Weapon { slot: u8 },
+    Shield,
+    /// Garment z-order is per-item/action/frame in Lua tables; 35 is the always-on-top fallback.
+    Garment,
+}
+
+impl SpriteRole {
+    /// Returns the z-order for this role given the current direction and IMF head-behind flag.
+    /// Lower z = drawn first (behind). Values match the zrenderer reference table.
+    pub fn z_order(self, top_left: bool, head_behind: bool) -> i32 {
+        match self {
+            SpriteRole::Shadow => -1,
+            SpriteRole::Body => if top_left { 15 } else { 10 },
+            SpriteRole::Head => match (top_left, head_behind) {
+                (true,  true)  => 14,
+                (true,  false) => 20,
+                (false, true)  =>  9,
+                (false, false) => 15,
+            },
+            SpriteRole::Headgear { slot } => {
+                let base = if top_left { 22 } else { 17 };
+                base + slot as i32
+            }
+            SpriteRole::Weapon { slot } => {
+                let base = if top_left { 28 } else { 23 };
+                base + slot as i32
+            }
+            SpriteRole::Shield => if top_left { 10 } else { 30 },
+            SpriteRole::Garment => 35,
+        }
+    }
+}
+
 /// Describes one layer in a composite sprite (body, head, headgear, …).
 pub struct CompositeLayerDef {
     pub atlas: Handle<RoAtlas>,
-    /// Draw order: lower values are drawn first (further back).
-    pub z_order: i32,
+    /// The semantic role of this layer. Drives z-order based on camera direction and IMF data.
+    pub role: SpriteRole,
 }
 
 /// Drive a single-quad composite billboard from multiple RoAtlas layers.
@@ -334,24 +381,47 @@ pub fn update_ro_composite(
             /// = anchor_attach − self_attach; zero for anchor layer and for layers
             /// whose attach points match the anchor's (weapons, garments, headgear).
             attach_offset: Vec2,
+            /// Computed z-order for this frame: role + direction + IMF head-behind flag.
+            z_order: i32,
         }
 
-        // Sort layers by z_order; the first entry is treated as the anchor (body).
-        let mut sorted: Vec<&CompositeLayerDef> = composite.layers.iter().collect();
-        sorted.sort_by_key(|l| l.z_order);
+        // Direction from the current tag suffix ("idle_nw" → top_left = true).
+        // Drives the z-order table: topLeft (W/NW/N/NE) vs bottomRight (S/SW/E/SE).
+        let is_top_left = composite.tag.as_deref().map(tag_is_top_left).unwrap_or(false);
 
-        // Resolve anchor attach point from the first (lowest z-order) layer.
-        let anchor_attach: Option<Vec2> = sorted.first().and_then(|l| {
-            atlases
-                .get(&l.atlas)
-                .and_then(|a| a.frame_attach_points.get(frame).copied().flatten())
-                .map(|ap| ap.as_vec2())
-        });
+        // The Body layer is the compositing anchor. Fall back to index 0 if none is tagged Body.
+        let body_idx = composite
+            .layers
+            .iter()
+            .position(|l| l.role == SpriteRole::Body)
+            .unwrap_or(0);
 
-        let mut frames: Vec<FrameInfo> = Vec::with_capacity(sorted.len());
+        // Anchor attach point and IMF head-behind flag both come from the body atlas.
+        let body_atlas = atlases.get(&composite.layers[body_idx].atlas);
+        let anchor_attach: Option<Vec2> = body_atlas
+            .and_then(|a| a.frame_attach_points.get(frame).copied().flatten())
+            .map(|ap| ap.as_vec2());
+        let head_behind = body_atlas
+            .and_then(|a| a.frame_head_behind.get(frame).copied())
+            .unwrap_or(false);
 
+        // Iterate body first (so frames[0] is always the anchor), then all other layers.
+        let layer_order: Vec<usize> = std::iter::once(body_idx)
+            .chain((0..composite.layers.len()).filter(|&i| i != body_idx))
+            .collect();
+
+        // `current_frame` is a flat index into the body atlas's frame sequence.
+        // Non-body layers (weapon, head, etc.) may have different frame counts per action,
+        // so their flat sequences diverge from the body's. We remap by computing the
+        // relative position within the body's tag, then applying it to each layer's own
+        // tag range for the same tag name.
+        let tag_name = composite.tag.clone();
+        let rel_frame = (frame as u16).saturating_sub(*tag_range.start());
+
+        let mut frames: Vec<FrameInfo> = Vec::with_capacity(composite.layers.len());
         let mut all_ready = true;
-        for layer_def in &sorted {
+        for &layer_idx in &layer_order {
+            let layer_def = &composite.layers[layer_idx];
             let Some(atlas) = atlases.get(&layer_def.atlas) else {
                 all_ready = false;
                 break;
@@ -361,7 +431,16 @@ pub fn update_ro_composite(
                 break;
             };
 
-            let atlas_idx = atlas.get_atlas_index(frame);
+            // Map relative position within body's tag to this layer's own tag range.
+            let mapped_frame = tag_name
+                .as_deref()
+                .and_then(|t| atlas.tags.get(t))
+                .map(|m| {
+                    (*m.range.start() + rel_frame).min(*m.range.end()) as usize
+                })
+                .unwrap_or(frame);
+
+            let atlas_idx = atlas.get_atlas_index(mapped_frame);
             let rect = layout.textures[atlas_idx];
             let atlas_size = layout.size.as_vec2();
 
@@ -370,13 +449,13 @@ pub fn update_ro_composite(
             let size_px = (rect.max - rect.min).as_vec2();
             let origin = atlas
                 .frame_origins
-                .get(frame)
+                .get(mapped_frame)
                 .copied()
                 .unwrap_or(IVec2::ZERO);
 
             let self_attach = atlas
                 .frame_attach_points
-                .get(frame)
+                .get(mapped_frame)
                 .copied()
                 .flatten()
                 .map(|ap| ap.as_vec2());
@@ -392,6 +471,7 @@ pub fn update_ro_composite(
                 size_px,
                 origin,
                 attach_offset,
+                z_order: layer_def.role.z_order(is_top_left, head_behind),
             });
         }
         if !all_ready || frames.is_empty() {
@@ -420,16 +500,23 @@ pub fn update_ro_composite(
         // Stable as long as nothing extends above/left of the body's top-left (rare for weapons).
         let canvas_feet = body.origin.as_vec2() + overflow;
 
-        // ── 4. Build layer uniforms ───────────────────────────────────────
+        // ── 4. Build layer uniforms (sorted by z-order) ───────────────────
+        // Canvas bounds (step 3) always use frames[0] (body) as the anchor.
+        // GPU draw order is determined by each frame's computed z_order:
+        // lower z = submitted first = drawn behind.
+        let mut render_order: Vec<usize> = (0..frames.len()).collect();
+        render_order.sort_by_key(|&i| frames[i].z_order);
+
         let mut textures: [Handle<Image>; MAX_LAYERS] = std::array::from_fn(|_| Handle::default());
         let mut layer_uniforms = [LayerUniform::default(); MAX_LAYERS];
         let count = frames.len().min(MAX_LAYERS) as u32;
 
-        for (i, fi) in frames.iter().enumerate().take(MAX_LAYERS) {
-            textures[i] = fi.image.clone();
+        for (slot, &fi_idx) in render_order.iter().enumerate().take(MAX_LAYERS) {
+            let fi = &frames[fi_idx];
+            textures[slot] = fi.image.clone();
             // top-left of this layer's frame in canvas pixels
             let offset = canvas_feet + fi.attach_offset - fi.origin.as_vec2();
-            layer_uniforms[i] = LayerUniform {
+            layer_uniforms[slot] = LayerUniform {
                 atlas_uv_min: fi.uv_min.into(),
                 atlas_uv_max: fi.uv_max.into(),
                 canvas_offset: offset.into(),
@@ -462,6 +549,12 @@ pub fn update_ro_composite(
         let local_y = canvas_size.y / 2.0 - canvas_feet.y;
         transform.translation = -*cam_right * local_x - *cam_up * local_y;
     }
+}
+
+/// Returns `true` if the direction suffix in `tag` is topLeft (W, NW, N, NE).
+/// Used to select the correct z-order column from the zrenderer reference table.
+fn tag_is_top_left(tag: &str) -> bool {
+    matches!(tag.rsplit('_').next(), Some("w" | "nw" | "n" | "ne"))
 }
 
 /// Builds the action tag string for use with [`RoComposite::tag`].

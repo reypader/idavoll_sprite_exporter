@@ -17,7 +17,7 @@ pub mod prelude {
     #[cfg(feature = "3d")]
     pub use crate::composite::{
         composite_tag, direction_index, orient_billboard, CompositeLayerDef, RoComposite,
-        RoCompositeMaterial, RoCompositePlugin, MAX_LAYERS,
+        RoCompositeMaterial, RoCompositePlugin, SpriteRole, MAX_LAYERS,
     };
     pub use crate::loader::{RoAtlas, RoAtlasLoader, TagMeta};
     pub use crate::RoSpritePlugin;

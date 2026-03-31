@@ -156,9 +156,9 @@ fn spawn_actor(
             parent.spawn((
                 RoComposite {
                     layers: vec![
-                        CompositeLayerDef { atlas: server.load("female_knight.spr"),              z_order: 0 },
-                        CompositeLayerDef { atlas: server.load("female_head1.spr"),               z_order: 1 },
-                        CompositeLayerDef { atlas: server.load("female_knight_spear_weapon.spr"), z_order: 2 },
+                        CompositeLayerDef { atlas: server.load("female_knight.spr"),              role: SpriteRole::Body },
+                        CompositeLayerDef { atlas: server.load("female_head1.spr"),               role: SpriteRole::Head },
+                        CompositeLayerDef { atlas: server.load("female_knight_spear_weapon.spr"), role: SpriteRole::Weapon { slot: 0 } },
                     ],
                     tag:     Some("idle_s".to_string()),
                     playing: false, // idle frames are driven by head-direction, not time
@@ -172,8 +172,9 @@ fn spawn_actor(
 }
 ```
 
-`z_order` controls compositing order (lower = drawn first / behind). The **lowest z_order
-layer is the anchor** — its attach point drives the position of all other layers.
+`SpriteRole` controls draw order. The `Body` layer is the compositing anchor — its attach
+point drives the position of all other layers. Draw order is computed per-frame from the
+role and the current direction suffix in the tag (topLeft vs bottomRight camera group).
 
 ### Driving the tag from game state
 
@@ -243,6 +244,25 @@ that occurs if you naively use world X/Y for the canvas offset.
 
 ---
 
+## SpriteRole — z-order reference
+
+| `SpriteRole` | topLeft (W/NW/N/NE) | bottomRight (S/SW/E/SE) |
+|---|---|---|
+| `Shadow` | −1 | −1 |
+| `Shield` | 10 | 30 |
+| `Body` | 15 | 10 |
+| `Head` (normal) | 20 | 15 |
+| `Head` (IMF behind body) | 14 | 9 |
+| `Headgear { slot: 0..3 }` | 22–25 | 17–20 |
+| `Weapon { slot: 0..1 }` | 28–29 | 23–24 |
+| `Garment` | 35 | 35 |
+
+Direction group is derived from the tag suffix (`"attack2_nw"` → topLeft). The head z-order
+drops when the body's `.imf` file says `priority(layer=1, action, frame) == 1` for that frame.
+`Garment` uses 35 (always-on-top) as a default; the full RO client drives it per-frame via Lua.
+
+---
+
 ## RoAtlas — asset internals
 
 ```rust
@@ -254,6 +274,7 @@ pub struct RoAtlas {
     pub frame_attach_points: Vec<Option<IVec2>>, // ACT attach point, feet-origin space
     pub tags:                HashMap<String, TagMeta>, // "idle_s" → frame range
     pub frame_indices:       Vec<usize>,          // logical frame → deduplicated atlas slot
+    pub frame_head_behind:   Vec<bool>,           // IMF priority(1,action,frame)==1 per frame
 }
 ```
 
@@ -263,7 +284,7 @@ need to position the sprite in a custom renderer.
 
 ---
 
-## Layer compositing — attach points
+## Layer compositing — attach points and frame remapping
 
 ACT attach points are in **feet-origin space, y-down** (`(0,0)` = feet, negative y = above
 feet). The plugin composites layers as follows:
@@ -276,6 +297,22 @@ canvas_top_left = canvas_feet + attach_offset − layer.origin
 Layers whose attach points match the anchor (weapons, garments, headgear) have
 `attach_offset = (0,0)` and render at the shared feet origin with only their ACT `x,y`
 offsets applied.
+
+### Frame remapping for non-body layers
+
+`RoComposite::current_frame` is an index into the **body** atlas's flat frame sequence.
+Different sprite types have different frame counts per action (body idle = 3 frames/direction,
+weapon idle = 1 invisible frame/direction), so their flat sequences diverge. The plugin
+remaps non-body layers by computing the relative position within the body's current tag and
+applying it to the same tag in the layer's own atlas:
+
+```
+rel_frame    = current_frame − body_tag.start
+mapped_frame = layer_tag.start + rel_frame   (clamped to layer_tag.end)
+```
+
+This ensures the weapon shows `attack1_e` frame 2 when the body is on `attack1_e` frame 2,
+regardless of how many invisible frames the weapon accumulates in earlier actions.
 
 ---
 
