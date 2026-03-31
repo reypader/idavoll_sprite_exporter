@@ -5,14 +5,14 @@ mod loader;
 
 pub use animation::{
     render_animation, AnimationRepeat, RenderAnimation, RoAnimation, RoAnimationControl,
-    RoAnimationPlugin, RoAnimationState,
+    RoAnimationPlugin, RoAnimationState, SpriteFrameEvent,
 };
 pub use loader::{RoAtlas, RoAtlasLoader, RoAtlasLoaderSettings, TagMeta};
 
 pub mod prelude {
     pub use crate::animation::{
         render_animation, AnimationRepeat, RenderAnimation, RoAnimation, RoAnimationControl,
-        RoAnimationPlugin, RoAnimationState,
+        RoAnimationPlugin, RoAnimationState, SpriteFrameEvent,
     };
     #[cfg(feature = "3d")]
     pub use crate::composite::{

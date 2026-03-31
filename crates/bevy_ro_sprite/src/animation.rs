@@ -20,6 +20,23 @@ impl Plugin for RoAnimationPlugin {
     }
 }
 
+/// Triggered when an animation frame with an ACT event is reached during playback.
+///
+/// Observe globally with `app.add_observer(|t: On<SpriteFrameEvent>| { ... })`, or
+/// on a specific entity with `commands.entity(e).observe(...)`.
+///
+/// Event strings are set by the RO client toolchain and typically contain either a
+/// logical trigger name (e.g. `"atk"`) or a sound file reference (e.g. `"attack.wav"`).
+#[derive(EntityEvent, Debug, Clone)]
+pub struct SpriteFrameEvent {
+    /// The entity whose animation produced this event (also used as the observer target).
+    pub entity: Entity,
+    /// The ACT event string (e.g. `"atk"`, `"attack.wav"`).
+    pub event: String,
+    /// The animation tag active when the event fired (e.g. `"attack1_s"`).
+    pub tag: Option<String>,
+}
+
 /// Anything that implements this trait can be a render target for [`RoAnimation`].
 pub trait RenderAnimation {
     type Extra<'e>;
@@ -130,11 +147,12 @@ pub enum AnimationRepeat {
 }
 
 pub fn update_ro_animation(
-    mut animations: Query<(&mut RoAnimation, &mut RoAnimationState)>,
+    mut animations: Query<(Entity, &mut RoAnimation, &mut RoAnimationState)>,
     atlases: Res<Assets<RoAtlas>>,
     time: Res<Time>,
+    mut commands: Commands,
 ) {
-    for (mut animation, mut state) in animations.iter_mut() {
+    for (entity, mut animation, mut state) in animations.iter_mut() {
         let Some(atlas) = atlases.get(&animation.atlas) else {
             continue;
         };
@@ -168,21 +186,32 @@ pub fn update_ro_animation(
                 Duration::from_secs_f32(state.elapsed.as_secs_f32() % frame_dur.as_secs_f32());
 
             let next = state.current_frame + 1;
-            if next > *range.end() {
+            let new_frame = if next > *range.end() {
                 match animation.animation.repeat {
                     AnimationRepeat::Loop => {
-                        state.current_frame = *range.start();
+                        *range.start()
                     }
                     AnimationRepeat::Count(ref mut n) if *n > 0 => {
                         *n -= 1;
-                        state.current_frame = *range.start();
+                        *range.start()
                     }
                     AnimationRepeat::Count(_) => {
                         animation.animation.playing = false;
+                        continue;
                     }
                 }
             } else {
-                state.current_frame = next;
+                next
+            };
+
+            state.current_frame = new_frame;
+
+            if let Some(Some(event)) = atlas.frame_events.get(usize::from(new_frame)) {
+                commands.trigger(SpriteFrameEvent {
+                    entity,
+                    event: event.clone(),
+                    tag: animation.animation.tag.clone(),
+                });
             }
         }
     }

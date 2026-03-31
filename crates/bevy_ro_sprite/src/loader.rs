@@ -32,6 +32,9 @@ pub struct RoAtlas {
     /// behind the body. Only meaningful for body sprites that have an associated `.imf` file;
     /// always `false` for other sprite types.
     pub frame_head_behind: Vec<bool>,
+    /// ACT event string for each logical frame, or `None` if the frame has no event.
+    /// Event strings are names like `"atk"` or sound file references like `"attack.wav"`.
+    pub frame_events: Vec<Option<String>>,
 }
 
 impl RoAtlas {
@@ -108,6 +111,7 @@ impl AssetLoader for RoAtlasLoader {
         let mut frame_origins: Vec<IVec2> = Vec::new();
         let mut frame_attach_points: Vec<Option<IVec2>> = Vec::new();
         let mut frame_head_behind: Vec<bool> = Vec::new();
+        let mut frame_events: Vec<Option<String>> = Vec::new();
 
         let pad = 1i32;
 
@@ -124,6 +128,14 @@ impl AssetLoader for RoAtlasLoader {
                 frame_head_behind.push(
                     imf.as_ref()
                         .and_then(|f| f.priority(1, action_idx, frame_idx)) == Some(1),
+                );
+
+                frame_events.push(
+                    if frame.event_id >= 0 {
+                        act.events.get(frame.event_id as usize).cloned()
+                    } else {
+                        None
+                    },
                 );
 
                 match render_frame_tight(&spr, frame, pad) {
@@ -239,6 +251,7 @@ impl AssetLoader for RoAtlasLoader {
             tags,
             frame_indices: remapped,
             frame_head_behind,
+            frame_events,
         })
     }
 

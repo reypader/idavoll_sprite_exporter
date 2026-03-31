@@ -21,7 +21,7 @@ use bevy::{
     shader::ShaderRef,
 };
 
-use crate::loader::RoAtlas;
+use crate::{animation::SpriteFrameEvent, loader::RoAtlas};
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -307,6 +307,7 @@ impl Plugin for RoCompositePlugin {
 /// Advances animation and rebuilds the `RoCompositeMaterial` uniforms each frame.
 pub fn update_ro_composite(
     mut composites: Query<(
+        Entity,
         &mut RoComposite,
         &MeshMaterial3d<RoCompositeMaterial>,
         &mut Transform,
@@ -316,6 +317,7 @@ pub fn update_ro_composite(
     mut mats: ResMut<Assets<RoCompositeMaterial>>,
     time: Res<Time>,
     camera_q: Query<&GlobalTransform, With<Camera3d>>,
+    mut commands: Commands,
 ) {
     // Camera right/up in world space: the billboard's local axes after look_at.
     // Used to convert canvas-pixel offsets to world-space translation.
@@ -324,7 +326,7 @@ pub fn update_ro_composite(
     } else {
         (Dir3::X, Dir3::Y)
     };
-    for (mut composite, mat_handle, mut transform) in &mut composites {
+    for (entity, mut composite, mat_handle, mut transform) in &mut composites {
         // ── 1. Advance animation ──────────────────────────────────────────
         // Resolve tag range and frame duration from the first layer's atlas.
         // We extract owned values immediately to avoid holding borrows across
@@ -347,6 +349,14 @@ pub fn update_ro_composite(
             .copied();
         let _ = first_atlas; // release borrow on atlases before mutating composite
 
+        // The Body layer is the compositing anchor and the source of ACT frame events.
+        // Compute this early so it's available both during frame advance and in step 2.
+        let body_idx = composite
+            .layers
+            .iter()
+            .position(|l| l.role == SpriteRole::Body)
+            .unwrap_or(0);
+
         if !tag_range.contains(&composite.current_frame) {
             composite.current_frame = *tag_range.start();
             composite.elapsed = Duration::ZERO;
@@ -359,11 +369,24 @@ pub fn update_ro_composite(
                 if composite.elapsed >= dur {
                     composite.elapsed = Duration::ZERO;
                     let next = composite.current_frame + 1;
-                    composite.current_frame = if next > *tag_range.end() {
+                    let new_frame = if next > *tag_range.end() {
                         *tag_range.start()
                     } else {
                         next
                     };
+                    composite.current_frame = new_frame;
+
+                    // Emit ACT frame events from the body atlas (the animation driver).
+                    let body_handle = composite.layers.get(body_idx).map(|l| l.atlas.clone());
+                    if let Some(atlas) = body_handle.as_ref().and_then(|h| atlases.get(h)) {
+                        if let Some(Some(event)) = atlas.frame_events.get(new_frame as usize) {
+                            commands.trigger(SpriteFrameEvent {
+                                entity,
+                                event: event.clone(),
+                                tag: composite.tag.clone(),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -388,13 +411,6 @@ pub fn update_ro_composite(
         // Direction from the current tag suffix ("idle_nw" → top_left = true).
         // Drives the z-order table: topLeft (W/NW/N/NE) vs bottomRight (S/SW/E/SE).
         let is_top_left = composite.tag.as_deref().map(tag_is_top_left).unwrap_or(false);
-
-        // The Body layer is the compositing anchor. Fall back to index 0 if none is tagged Body.
-        let body_idx = composite
-            .layers
-            .iter()
-            .position(|l| l.role == SpriteRole::Body)
-            .unwrap_or(0);
 
         // Anchor attach point and IMF head-behind flag both come from the body atlas.
         let body_atlas = atlases.get(&composite.layers[body_idx].atlas);
