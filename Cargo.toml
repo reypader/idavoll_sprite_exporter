@@ -2,6 +2,8 @@
 members = [
     "crates/ro-sprite",
     "crates/bevy_ro_sprite",
+    "crates/ro-maps",
+    "crates/bevy_ro_maps",
 ]
 resolver = "2"
 

@@ -1,0 +1,15 @@
+[package]
+name = "bevy_ro_maps"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_render",
+    "bevy_asset",
+    "bevy_log",
+    "bevy_pbr",
+    "png",
+] }
+ro-maps = { path = "../ro-maps" }
+anyhow = "1"
