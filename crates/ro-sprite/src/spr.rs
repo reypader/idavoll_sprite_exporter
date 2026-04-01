@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::io::{Cursor, Read};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -28,6 +28,7 @@ pub struct SprFile {
 }
 
 impl SprFile {
+    /// Implementation covers SPR v1.0-v2.1.
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 2 + 2 + 2 + 1024 {
             return Err(anyhow!("SPR file too small"));
@@ -42,6 +43,8 @@ impl SprFile {
         }
 
         let version = ru16(&mut c)?;
+
+        (|| -> anyhow::Result<SprFile> {
         let pal_count = ru16(&mut c)? as usize;
         let rgba_count = if version >= 0x200 {
             ru16(&mut c)? as usize
@@ -123,6 +126,11 @@ impl SprFile {
             palette_images,
             rgba_images,
         })
+        })()
+        .with_context(|| format!(
+            "SPR v{}.{} (implementation covers v1.0-v2.1)",
+            version >> 8, version & 0xFF
+        ))
     }
 
     pub fn get_image(&self, spr_id: i32, spr_type: i32) -> Option<&RawImage> {

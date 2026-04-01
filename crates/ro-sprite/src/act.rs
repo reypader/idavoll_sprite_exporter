@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
 #[derive(Debug, Clone)]
@@ -52,6 +52,7 @@ pub struct ActFile {
 }
 
 impl ActFile {
+    /// Implementation covers ACT v1.0-v2.5.
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut c = Cursor::new(data);
 
@@ -62,6 +63,8 @@ impl ActFile {
         }
 
         let version = ru16(&mut c)?;
+
+        (|| -> anyhow::Result<ActFile> {
         let action_count = ru16(&mut c)? as usize;
         c.seek(SeekFrom::Current(10))?; // 10 reserved bytes
 
@@ -172,6 +175,11 @@ impl ActFile {
             actions,
             events,
         })
+        })()
+        .with_context(|| format!(
+            "ACT v{}.{} (implementation covers v1.0-v2.5)",
+            version >> 8, version & 0xFF
+        ))
     }
 }
 

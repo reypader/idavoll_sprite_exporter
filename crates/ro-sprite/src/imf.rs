@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::io::{Cursor, Read};
 
 fn read_f32(cursor: &mut Cursor<&[u8]>) -> Result<f32> {
@@ -35,10 +35,13 @@ pub struct ImfFile {
 }
 
 impl ImfFile {
+    /// Implementation has no version branches; covers all known IMF versions.
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
 
         let version = read_f32(&mut cursor)?;
+
+        (|| -> anyhow::Result<ImfFile> {
         let _checksum = read_i32(&mut cursor)?;
         let max_layer = read_u32(&mut cursor)? as usize;
 
@@ -61,6 +64,8 @@ impl ImfFile {
         }
 
         Ok(ImfFile { version, layers })
+        })()
+        .with_context(|| format!("IMF v{version}"))
     }
 
     /// Returns the priority for the given layer/action/frame, or `None` if out of bounds.
