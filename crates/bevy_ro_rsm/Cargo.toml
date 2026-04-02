@@ -1,5 +1,5 @@
 [package]
-name = "bevy_ro_maps"
+name = "bevy_ro_rsm"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,9 +8,6 @@ bevy = { version = "0.18", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_log",
-    "bevy_pbr",
-    "png",
 ] }
-ro-maps = { path = "../ro-maps" }
-bevy_ro_rsm = { path = "../bevy_ro_rsm" }
+ro-rsm = { path = "../ro-rsm" }
 anyhow = "1"

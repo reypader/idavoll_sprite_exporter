@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use ro_maps::{GatFile, GndFile, RswLighting};
+use ro_maps::{GatFile, GndFile, RswLighting, RswObject};
 
 /// Primary Bevy asset for a Ragnarok Online map. Loaded from a `.gnd` file; the loader
 /// automatically co-loads the same-named `.gat` and `.rsw` files.
@@ -12,4 +12,6 @@ pub struct RoMapAsset {
     pub gat: GatFile,
     /// Directional lighting parameters from the RSW scene file.
     pub lighting: RswLighting,
+    /// All RSW scene objects (models, lights, audio sources, effects).
+    pub objects: Vec<RswObject>,
 }

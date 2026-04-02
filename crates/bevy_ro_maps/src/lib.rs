@@ -19,13 +19,15 @@ pub mod prelude {
 }
 
 use bevy::prelude::*;
+use bevy_ro_rsm::RsmPlugin;
 
 pub struct RoMapsPlugin;
 
 impl Plugin for RoMapsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(RsmPlugin);
         app.init_asset::<RoMapAsset>();
         app.register_asset_loader(RoMapLoader);
-        app.add_systems(Update, render::spawn_map_meshes);
+        app.add_systems(Update, (render::spawn_map_meshes, render::spawn_model_meshes));
     }
 }

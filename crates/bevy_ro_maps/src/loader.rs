@@ -42,6 +42,7 @@ impl AssetLoader for RoMapLoader {
             gnd,
             gat,
             lighting: rsw.lighting,
+            objects: rsw.objects,
         })
     }
 
